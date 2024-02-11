@@ -1,6 +1,15 @@
 # Fstab helper
 Program written using ftxui that help's you manage|setup fstab file.
 If you remove|edit some entries from fstab, they will be stored in /etc/fstab_bak , so all disabled device values are recovered and showed on next start(if corresponding device plugged)
+
+Load order
+
+1 read /etc/fstab_bak
+
+2 read /etc/fstab
+
+so values from /etc/fstab  always overrides values from /etc/fstab_bak
+
 ### Screenshot
 Screenshot of a program           |  what it wrote to /etc/fstab
 :-------------------------:|:-------------------------:
