@@ -21,6 +21,7 @@ private:
     std::vector<DeviceClass*> devicesClasses;
     std::vector<std::string> listFiles(std::string path);
     std::vector<std::string> getType(std::vector<std::string> devices);
+    std::optional<std::string> getLabel(std::string path);
     std::vector<std::string> extractDevice(std::vector<std::string> input);
     std::map<std::string,InfoContainer> readFstab(std::string path);
     std::vector<Ui::DeviceEntry> getTUIlook();

@@ -5,7 +5,6 @@
 #include <fstream>
 const std::string  uuidPath = "/dev/disk/by-uuid/";
 const std::string  labelPath = "/dev/disk/by-label";
-const std::string  dirPath = "/proc/mounts";
 const std::string fstabPath = "/etc/fstab";
 const std::string backFstabPath = "/etc/fstab_bak";
 std::vector<std::string> Controller::listFiles(std::string path)
@@ -31,6 +30,27 @@ std::vector<std::string> Controller::getType(std::vector<std::string> devices)
     }
     return devices;
 }
+
+std::optional<std::string> Controller::getLabel(std::string path) {
+        blkid_probe pr = blkid_new_probe_from_filename(path.c_str());
+        if (!pr) {
+            return {};
+        }
+        blkid_do_probe(pr);
+        const char *fsType;
+        if (blkid_probe_has_value(pr, "LABEL") == 1) {
+            blkid_probe_lookup_value(pr,"LABEL",&fsType,NULL);
+        } else if (blkid_probe_has_value(pr, "PARTLABEL") == 1) {
+            blkid_probe_lookup_value(pr,"PARTLABEL",&fsType,NULL);
+        } else {
+            blkid_free_probe(pr);
+            return {};
+        }
+        blkid_free_probe(pr);
+        return fsType;
+}
+
+
 std::vector<std::string> Controller::extractDevice(std::vector<std::string> input)
 {
     for(int i = 0;i<input.size();i++){
@@ -69,10 +89,13 @@ std::map<std::string,Controller::InfoContainer> Controller::readFstab(std::strin
     while(getline(file,line)){
         std::vector<std::string> separator;
         if(line.empty()){continue;}
-        if(line[0] == '#' ){continue;}
-        if(line.find("UUID=")==line.npos){continue;}
+        if(line[0] == '#'){continue;}
+        if(line.find("UUID=") == line.npos && line.find("/dev/disk/by-uuid/") == line.npos){continue;}
         int pos1 = 5;
         int pos2 = 5;
+        if (line.find("/dev/disk/by-uuid/") != line.npos) {
+            pos1 = pos2 = std::string("/dev/disk/by-uuid/").length();
+        }
         for(int i = 5;i<=line.size();i++){
             if(line[i] == ' ' || line[i]=='\t' || i == (line.size())){ 
                 pos2 = i-pos1;
@@ -80,9 +103,7 @@ std::map<std::string,Controller::InfoContainer> Controller::readFstab(std::strin
                 pos1 = i+1;
                 if(tmp.empty()||tmp[0]=='\t'){continue;}
                 separator.push_back(tmp);
-
             }
-
         }
         InfoContainer container;
         container.mountDir = separator[1];
@@ -91,7 +112,6 @@ std::map<std::string,Controller::InfoContainer> Controller::readFstab(std::strin
         container.fsck = separator[5];
         container.enabled = 1;
         output.insert(std::make_pair(separator[0],container));
-        
   }
   file.close();
   return output;
@@ -117,34 +137,52 @@ std::vector<Ui::DeviceEntry> Controller::getTUIlook()
 }
 Controller::Controller()
 {
-    
-    std::map<std::string,std::string> allLabels = getDevices(listFiles(labelPath));
+    std::map<std::string,std::string> allLabels;
+    if (std::filesystem::exists(labelPath)) {
+        allLabels = getDevices(listFiles(labelPath));
+    }
     std::map<std::string,std::string> allUUIDs = getDevices(listFiles(uuidPath));
     std::vector<std::string> devices; for(auto const& i:allUUIDs){devices.push_back(i.first);}
     std::map<std::string,std::string> allTypes = getDevices(devices,getType(devices));
     std::map<std::string,Controller::InfoContainer> fstabData;
-    for(int i;i<devices.size();i++){
-        devicesClasses.push_back(new DeviceClass(allUUIDs[devices[i]],allLabels[devices[i]],devices[i],allTypes[devices[i]]));
+    for(const std::string& key: devices){
+        std::string label = key;
+        if (allLabels.count(key) == 1) {
+            label = allLabels[key];
+        } else {
+            std::optional<std::string> blkid_label = getLabel(key);
+            if (blkid_label.has_value()) {
+                label = blkid_label.value();
+            }
+        }
+        devicesClasses.push_back(new DeviceClass(allUUIDs[key],label,key,allTypes[key]));
     }
     if(std::filesystem::exists(backFstabPath)){
         fstabData = readFstab(backFstabPath);
-        for(int i = 0;i<fstabData.size();i++){
-            devicesClasses[i]->setDir(fstabData[allUUIDs[devices[i]]].mountDir);
-            devicesClasses[i]->setOptions(fstabData[allUUIDs[devices[i]]].options);
-            devicesClasses[i]->setFsck(fstabData[allUUIDs[devices[i]]].fsck);
-            devicesClasses[i]->setDump(fstabData[allUUIDs[devices[i]]].dump);
-            devicesClasses[i]->setIsEnabled(fstabData[allUUIDs[devices[i]]].enabled);
+        for(auto const& device: devicesClasses){
+        std::string key = device->getUUID();
+        if (fstabData.count(key) == 1) {
+                Controller::InfoContainer container = fstabData[key];
+                device->setDir(container.mountDir);
+                device->setOptions(container.options);
+                device->setFsck(container.fsck);
+                device->setDump(container.dump);
+                device->setIsEnabled(container.enabled);
+            }
         }
     }
     fstabData = readFstab(fstabPath);
-    for(int i = 0;i<devices.size();i++){
-        devicesClasses[i]->setDir(fstabData[allUUIDs[devices[i]]].mountDir);
-        devicesClasses[i]->setOptions(fstabData[allUUIDs[devices[i]]].options);
-        devicesClasses[i]->setFsck(fstabData[allUUIDs[devices[i]]].fsck);
-        devicesClasses[i]->setDump(fstabData[allUUIDs[devices[i]]].dump);
-        devicesClasses[i]->setIsEnabled(fstabData[allUUIDs[devices[i]]].enabled);
+    for(auto const& device: devicesClasses){
+        std::string key = device->getUUID();
+        if (fstabData.count(key) == 1) {
+            Controller::InfoContainer container = fstabData[key];
+            device->setDir(container.mountDir);
+            device->setOptions(container.options);
+            device->setFsck(container.fsck);
+            device->setDump(container.dump);
+            device->setIsEnabled(container.enabled);
+        }
     }
-    
     TUI = new Ui();
     TUI->controller = this;
     TUI->setDeviceUI(getTUIlook());
@@ -152,7 +190,6 @@ Controller::Controller()
 }
 void Controller::write()
 {
-    
     std::ofstream file(fstabPath);
     std::ofstream fileBak(backFstabPath);
     updateDevices(TUI->getDeviceUI());
@@ -165,11 +202,19 @@ void Controller::write()
 }
 void Controller::updateDevices(std::vector<Ui::DeviceEntry> input)
 {
-    for(int i = 0;i<input.size();i++){
-        devicesClasses[i]->setDir(input[i].dir);
-        devicesClasses[i]->setDump(input[i].dump);
-        devicesClasses[i]->setFsck(input[i].fsck);
-        devicesClasses[i]->setIsEnabled(input[i].isEnabled);
-        devicesClasses[i]->setOptions(input[i].options);
+    std::map<std::string, Ui::DeviceEntry> inputMapped;
+    for (auto const& input: input) {
+        inputMapped.insert(std::make_pair(input.UUID, input));
+    }
+    for(auto const& device: devicesClasses){
+        std::string key = device->getUUID();
+        if (inputMapped.count(key)) {
+            Ui::DeviceEntry obj = inputMapped[key];
+            device->setDir(obj.dir);
+            device->setDump(obj.dump);
+            device->setFsck(obj.fsck);
+            device->setIsEnabled(obj.isEnabled);
+            device->setOptions(obj.options);
+        }
     }
 }
