@@ -81,7 +81,7 @@ std::map<std::string,std::string> Controller::getDevices(std::vector<std::string
     return map;
 }
 
-std::map<std::string,Controller::InfoContainer> Controller::readFstab(std::string path)
+std::map<std::string,Controller::InfoContainer> Controller::readFstab(std::string path, bool enabled = true)
 {
     std::map<std::string,InfoContainer> output;
     std::fstream file(path);
@@ -110,7 +110,7 @@ std::map<std::string,Controller::InfoContainer> Controller::readFstab(std::strin
         container.options = separator[3];
         container.dump = separator[4];
         container.fsck = separator[5];
-        container.enabled = 1;
+        container.enabled = enabled;
         output.insert(std::make_pair(separator[0],container));
   }
   file.close();
@@ -158,7 +158,7 @@ Controller::Controller()
         devicesClasses.push_back(new DeviceClass(allUUIDs[key],label,key,allTypes[key]));
     }
     if(std::filesystem::exists(backFstabPath)){
-        fstabData = readFstab(backFstabPath);
+        fstabData = readFstab(backFstabPath, false);
         for(auto const& device: devicesClasses){
         std::string key = device->getUUID();
         if (fstabData.count(key) == 1) {

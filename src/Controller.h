@@ -23,7 +23,7 @@ private:
     std::vector<std::string> getType(std::vector<std::string> devices);
     std::optional<std::string> getLabel(std::string path);
     std::vector<std::string> extractDevice(std::vector<std::string> input);
-    std::map<std::string,InfoContainer> readFstab(std::string path);
+    std::map<std::string,InfoContainer> readFstab(std::string path, bool enabled);
     std::vector<Ui::DeviceEntry> getTUIlook();
     void updateDevices(std::vector<Ui::DeviceEntry> input);
     Ui* TUI;

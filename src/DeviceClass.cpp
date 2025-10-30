@@ -91,7 +91,19 @@ std::string DeviceClass::getFsck()
 {
     return std::to_string(this->fsck);
 }
-void DeviceClass::write(std::ofstream &file,int force)
+void DeviceClass::
+
+
+
+
+
+
+
+
+
+
+
+write(std::ofstream &file,int force)
 {
     
     if(!(isEnabled || (force && !dir.empty()))){
