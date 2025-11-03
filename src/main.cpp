@@ -13,6 +13,4 @@ int main() {
   checkRoot();
   Controller *controller  = new Controller();
   return 0;
- 
-  
 }
